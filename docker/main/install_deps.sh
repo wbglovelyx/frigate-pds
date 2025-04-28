@@ -1,10 +1,10 @@
 #!/bin/bash
 
 set -euxo pipefail
-
-apt-get -qq update
-
-apt-get -qq install --no-install-recommends -y \
+#禁止使用 -qq 看着不动难受
+# apt-get -qq update
+# apt-get -qq install --no-install-recommends -y \
+apt-get install --no-install-recommends -y \
     apt-transport-https \
     ca-certificates \
     gnupg \
@@ -24,36 +24,35 @@ apt-get -qq install --no-install-recommends -y \
 update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
 
 mkdir -p -m 600 /root/.gnupg
-
 # install coral runtime
 wget -q -O /tmp/libedgetpu1-max.deb "https://github.com/feranick/libedgetpu/releases/download/16.0TF2.17.1-1/libedgetpu1-max_16.0tf2.17.1-1.bookworm_${TARGETARCH}.deb"
 unset DEBIAN_FRONTEND
 yes | dpkg -i /tmp/libedgetpu1-max.deb && export DEBIAN_FRONTEND=noninteractive
 rm /tmp/libedgetpu1-max.deb
 
-# ffmpeg -> amd64
-if [[ "${TARGETARCH}" == "amd64" ]]; then
-    mkdir -p /usr/lib/ffmpeg/5.0
-    wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2022-07-31-12-37/ffmpeg-n5.1-2-g915ef932a3-linux64-gpl-5.1.tar.xz"
-    tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/5.0 --strip-components 1 amd64/bin/ffmpeg amd64/bin/ffprobe
-    rm -rf ffmpeg.tar.xz
-    mkdir -p /usr/lib/ffmpeg/7.0
-    wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2024-09-19-12-51/ffmpeg-n7.0.2-18-g3e6cec1286-linux64-gpl-7.0.tar.xz"
-    tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/7.0 --strip-components 1 amd64/bin/ffmpeg amd64/bin/ffprobe
-    rm -rf ffmpeg.tar.xz
-fi
+# # ffmpeg -> amd64
+# if [[ "${TARGETARCH}" == "amd64" ]]; then
+#     mkdir -p /usr/lib/ffmpeg/5.0
+#     wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2022-07-31-12-37/ffmpeg-n5.1-2-g915ef932a3-linux64-gpl-5.1.tar.xz"
+#     tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/5.0 --strip-components 1 amd64/bin/ffmpeg amd64/bin/ffprobe
+#     rm -rf ffmpeg.tar.xz
+#     mkdir -p /usr/lib/ffmpeg/7.0
+#     wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2024-09-19-12-51/ffmpeg-n7.0.2-18-g3e6cec1286-linux64-gpl-7.0.tar.xz"
+#     tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/7.0 --strip-components 1 amd64/bin/ffmpeg amd64/bin/ffprobe
+#     rm -rf ffmpeg.tar.xz
+# fi
 
-# ffmpeg -> arm64
-if [[ "${TARGETARCH}" == "arm64" ]]; then
-    mkdir -p /usr/lib/ffmpeg/5.0
-    wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2022-07-31-12-37/ffmpeg-n5.1-2-g915ef932a3-linuxarm64-gpl-5.1.tar.xz"
-    tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/5.0 --strip-components 1 arm64/bin/ffmpeg arm64/bin/ffprobe
-    rm -f ffmpeg.tar.xz
-    mkdir -p /usr/lib/ffmpeg/7.0
-    wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2024-09-19-12-51/ffmpeg-n7.0.2-18-g3e6cec1286-linuxarm64-gpl-7.0.tar.xz"
-    tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/7.0 --strip-components 1 arm64/bin/ffmpeg arm64/bin/ffprobe
-    rm -f ffmpeg.tar.xz
-fi
+# # ffmpeg -> arm64
+# if [[ "${TARGETARCH}" == "arm64" ]]; then
+#     mkdir -p /usr/lib/ffmpeg/5.0
+#     wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2022-07-31-12-37/ffmpeg-n5.1-2-g915ef932a3-linuxarm64-gpl-5.1.tar.xz"
+#     tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/5.0 --strip-components 1 arm64/bin/ffmpeg arm64/bin/ffprobe
+#     rm -f ffmpeg.tar.xz
+#     mkdir -p /usr/lib/ffmpeg/7.0
+#     wget -qO ffmpeg.tar.xz "https://github.com/NickM-27/FFmpeg-Builds/releases/download/autobuild-2024-09-19-12-51/ffmpeg-n7.0.2-18-g3e6cec1286-linuxarm64-gpl-7.0.tar.xz"
+#     tar -xf ffmpeg.tar.xz -C /usr/lib/ffmpeg/7.0 --strip-components 1 arm64/bin/ffmpeg arm64/bin/ffprobe
+#     rm -f ffmpeg.tar.xz
+# fi
 
 # arch specific packages
 if [[ "${TARGETARCH}" == "amd64" ]]; then
@@ -92,8 +91,9 @@ apt-get clean autoclean -y
 apt-get autoremove --purge -y
 rm -rf /var/lib/apt/lists/*
 
-# Install yq, for frigate-prepare and go2rtc echo source
-curl -fsSL \
-    "https://github.com/mikefarah/yq/releases/download/v4.33.3/yq_linux_$(dpkg --print-architecture)" \
-    --output /usr/local/bin/yq
-chmod +x /usr/local/bin/yq
+# 此处源文件被注释
+# # Install yq, for frigate-prepare and go2rtc echo source
+# curl -fsSL \
+#     "https://github.com/mikefarah/yq/releases/download/v4.33.3/yq_linux_$(dpkg --print-architecture)" \
+#     --output /usr/local/bin/yq
+# chmod +x /usr/local/bin/yq

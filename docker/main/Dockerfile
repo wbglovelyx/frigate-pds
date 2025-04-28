@@ -203,9 +203,17 @@ COPY --from=wheels /rootfs/ /
 COPY docker/main/rootfs/ /
 
 
-# Frigate deps (ffmpeg, python, nginx, go2rtc, s6-overlay, etc)
 FROM slim-base AS deps
 ARG TARGETARCH
+
+# 配置APT国内源（以中科大为例）
+RUN sed -i 's@deb.debian.org@mirrors.ustc.edu.cn@g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's@security.debian.org@mirrors.ustc.edu.cn/debian-security@g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update
+
+# 配置Python Pip国内源
+RUN mkdir -p ~/.pip && \
+    echo "[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple/\ntrusted-host = pypi.tuna.tsinghua.edu.cn" > ~/.pip/pip.conf
 
 ARG DEBIAN_FRONTEND
 # http://stackoverflow.com/questions/48162574/ddg#49462622
@@ -233,15 +241,56 @@ ENV PATH="/usr/local/go2rtc/bin:/usr/local/tempio/bin:/usr/local/nginx/sbin:${PA
 RUN --mount=type=bind,source=docker/main/install_deps.sh,target=/deps/install_deps.sh \
     /deps/install_deps.sh
 
+RUN apt-get update && apt-get install -y xz-utils
+# 创建 ffmpeg 目录并解压 ffmpeg 版本 5.0
+COPY docker/main/amd_github/ffmpeg-n5.1-2-g915ef932a3-linux64-gpl-5.1.tar.xz /usr/lib/ffmpeg/5.0/
+RUN mkdir -p /usr/lib/ffmpeg/5.0 && \
+    tar -xf /usr/lib/ffmpeg/5.0/ffmpeg-n5.1-2-g915ef932a3-linux64-gpl-5.1.tar.xz -C /usr/lib/ffmpeg/5.0 --strip-components 1 amd64/bin/ffmpeg amd64/bin/ffprobe && \
+    rm -rf /usr/lib/ffmpeg/5.0/ffmpeg-n5.1-2-g915ef932a3-linux64-gpl-5.1.tar.xz
+
+# 创建 ffmpeg 目录并解压 ffmpeg 版本 7.0
+COPY docker/main/amd_github/ffmpeg-n7.0.2-18-g3e6cec1286-linux64-gpl-7.0.tar.xz /usr/lib/ffmpeg/7.0/
+RUN mkdir -p /usr/lib/ffmpeg/7.0 && \
+    tar -xf /usr/lib/ffmpeg/7.0/ffmpeg-n7.0.2-18-g3e6cec1286-linux64-gpl-7.0.tar.xz -C /usr/lib/ffmpeg/7.0 --strip-components 1 amd64/bin/ffmpeg amd64/bin/ffprobe && \
+    rm -rf /usr/lib/ffmpeg/7.0/ffmpeg-n7.0.2-18-g3e6cec1286-linux64-gpl-7.0.tar.xz
+
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
+COPY docker/main/amd_github/intel-graphics.key /tmp/intel-graphics.key
+RUN gpg --dearmor /tmp/intel-graphics.key && \
+    mv /tmp/intel-graphics.key.gpg /usr/share/keyrings/intel-graphics.gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy client" | tee /etc/apt/sources.list.d/intel-gpu-jammy.list && \
+    apt-get -qq update && \
+    apt-get -qq install --no-install-recommends --no-install-suggests -y \
+        intel-opencl-icd=24.35.30872.31-996~22.04 \
+        intel-level-zero-gpu=1.3.29735.27-914~22.04 \
+        intel-media-va-driver-non-free=24.3.3-996~22.04 \
+        libmfx1=23.2.2-880~22.04 \
+        libmfxgen1=24.2.4-914~22.04 \
+        libvpl2=1:2.13.0.0-996~22.04 && \
+    rm -f /usr/share/keyrings/intel-graphics.gpg && \
+    rm -f /etc/apt/sources.list.d/intel-gpu-jammy.list
+
+
+# 安装 yq 工具
+COPY docker/main/amd_github/yq_linux_amd64 /usr/local/bin/yq
+RUN chmod +x /usr/local/bin/yq
+
+
 ENV DEFAULT_FFMPEG_VERSION="7.0"
 ENV INCLUDED_FFMPEG_VERSIONS="${DEFAULT_FFMPEG_VERSION}:5.0"
 
+# 后续步骤保持不变（已加速依赖下载）
 RUN wget -q https://bootstrap.pypa.io/get-pip.py -O get-pip.py \
     && sed -i 's/args.append("setuptools")/args.append("setuptools==77.0.3")/' get-pip.py \
     && python3 get-pip.py "pip"
 
 RUN --mount=type=bind,from=wheels,source=/wheels,target=/deps/wheels \
-    pip3 install -U /deps/wheels/*.whl
+    pip3 install -U /deps/wheels/*.whl -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 COPY --from=deps-rootfs / /
 
@@ -288,7 +337,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=bind,source=./docker/main/requirements-dev.txt,target=/workspace/frigate/requirements-dev.txt \
-    pip3 install -r requirements-dev.txt
+    pip3 install -r requirements-dev.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 HEALTHCHECK NONE
 
