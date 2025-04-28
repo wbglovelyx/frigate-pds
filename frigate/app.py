@@ -650,7 +650,7 @@ class FrigateApp:
         self.init_historical_regions()
         self.start_detected_frames_processor()
         self.start_camera_processors()
-        self.start_camera_capture_processes()
+        self.start_camera_capture_processes()#这个类的作用是用于捕获帧
         self.start_audio_processor()
         self.start_storage_maintainer()
         self.start_stats_emitter()

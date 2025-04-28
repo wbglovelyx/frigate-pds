@@ -474,14 +474,14 @@ def track_camera(
     config: CameraConfig,
     model_config: ModelConfig,
     labelmap: dict[int, str],
-    detection_queue: Queue,
-    result_connection: MpEvent,
-    detected_objects_queue,
-    camera_metrics: CameraMetrics,
-    ptz_metrics: PTZMetrics,
-    region_grid: list[list[dict[str, Any]]],
+    detection_queue: Queue,#进程间的共享队列，用于存储帧信息
+    result_connection: MpEvent,#进程间的共享事件，用于通知检测结果
+    detected_objects_queue,#进程间的共享队列，用于存储检测到的对象信息
+    camera_metrics: CameraMetrics,#摄像头度量信息
+    ptz_metrics: PTZMetrics,#摄像头PTZ度量信息
+    region_grid: list[list[dict[str, Any]]],#区域网格信息
 ):
-    stop_event = mp.Event()
+    stop_event = mp.Event()#通过主进程进行设置，停止子进程
 
     def receiveSignal(signalNumber, frame):
         stop_event.set()
@@ -489,7 +489,7 @@ def track_camera(
     signal.signal(signal.SIGTERM, receiveSignal)
     signal.signal(signal.SIGINT, receiveSignal)
 
-    threading.current_thread().name = f"process:{name}"
+    threading.current_thread().name = f"process:{name}"#主进程里面的线程
     setproctitle(f"frigate.process:{name}")
     listen()
 

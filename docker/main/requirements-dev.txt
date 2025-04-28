@@ -1,1 +1,2 @@
 ruff
+python-snap7 == 2.0.2
