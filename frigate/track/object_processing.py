@@ -601,7 +601,7 @@ class TrackedObjectProcessor(threading.Thread):
 
                 current_enabled = config.enabled
                 camera_state = self.camera_states[camera]
-
+                # 如果摄像头之前处于启用状态但现在被禁用，则结束所有事件
                 if camera_state.prev_enabled and not current_enabled:
                     logger.debug(f"Not processing objects for disabled camera {camera}")
                     self.force_end_all_events(camera, camera_state)

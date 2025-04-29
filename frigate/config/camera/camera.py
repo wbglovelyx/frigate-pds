@@ -51,6 +51,7 @@ class CameraTypeEnum(str, Enum):
 class CameraConfig(FrigateBaseModel):
     name: Optional[str] = Field(None, title="Camera name.", pattern=REGEX_CAMERA_NAME)
     enabled: bool = Field(default=True, title="Enable camera.")
+    is_ld: bool = Field(default=False, title="在这里输入是否配合ld使用")
 
     # Options with global fallback
     audio: AudioConfig = Field(

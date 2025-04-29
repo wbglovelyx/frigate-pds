@@ -104,6 +104,15 @@ class FrigateApp:
         self.frame_manager = SharedMemoryFrameManager()
         self.config = config
 
+        #########################################################################################
+        #在次数初始化雷达所需要的参数
+        #首先需要一个雷达的分数，分数是一个进程间的共享变量
+        #但是其中有很多的雷达，所以需要一个字典，来存储不同雷达的分数
+        # self.ld_score = mp.Value("d", 0.0)
+        self.ld_score_dist: list[dict[str, mp.value]] = []#这个列表用来存储不同的雷达的分数
+        #########################################################################################
+
+
     def ensure_dirs(self) -> None:
         dirs = [
             CONFIG_DIR,
@@ -400,7 +409,34 @@ class FrigateApp:
             self.stop_event,
         )
         self.ptz_autotracker_thread.start()
+    ######################################################################################
+    #在此处开启一个进程使用3个线程来处理3个不同的雷达数据的处理，只需要一个共享变量score就可以
+    def start_ld_score_processor(self) -> None:
+        '''
+        首先通过配置文件来获取雷达的名称和雷达的ip和雷达的端口号，雷达的数据是通过mqtt来发送的，并且
+        再此处，一定要保证雷达的名称是唯一的，并且一定需要和摄像头的名称对应起来，这样用来启动雷达和摄
+        像头的数据融合，然后传入共享变量，ld_score_dist，通过名称来存入雷达的分数
+        '''
+        #首先获取摄像头名称列表
+        camerasList = [
+            name
+            for name in self.config.cameras.values()
+        ]
+        #测试plc和weights
+        # print(self.config.plc.name)
+        # print(self.config.weights.camera)
+        # print(self.config.weights.stop)
+        #在获取每一个ld的数据
+        for name, config in self.config.ld.items():
+            if name in camerasList:
+                pass
+            else:
+                self.log_queue.put("ld进程启动失败,错误：每个雷达的名称必须有一个对应的摄像头名称")
+                self.stop_event.is_set()
 
+
+    #在此处开启了一个线程来进行物体的检测结果的发布
+    ######################################################################################
     def start_detected_frames_processor(self) -> None:
         self.detected_frames_processor = TrackedObjectProcessor(
             self.config,
@@ -647,6 +683,7 @@ class FrigateApp:
         self.init_embeddings_client()
         self.start_video_output_processor()
         self.start_ptz_autotracker()
+        self.start_ld_score_processor()#  ###########
         self.init_historical_regions()
         self.start_detected_frames_processor()
         self.start_camera_processors()

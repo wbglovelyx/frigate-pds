@@ -19,6 +19,7 @@ from pydantic import (
 from ruamel.yaml import YAML
 from typing_extensions import Self
 
+from frigate.config.ld.ld_config import LdConfig
 from frigate.const import REGEX_JSON
 from frigate.detectors import DetectorConfig, ModelConfig
 from frigate.detectors.detector_config import BaseDetectorConfig
@@ -63,10 +64,12 @@ from .database import DatabaseConfig
 from .env import EnvVars
 from .logger import LoggerConfig
 from .mqtt import MqttConfig
+from .plc import PlcConfig
 from .proxy import ProxyConfig
 from .telemetry import TelemetryConfig
 from .tls import TlsConfig
 from .ui import UIConfig
+from .weights import WeightsConfig
 
 __all__ = ["FrigateConfig"]
 
@@ -338,6 +341,9 @@ class FrigateConfig(FrigateBaseModel):
         default_factory=RestreamConfig, title="Global restream configuration."
     )
     mqtt: MqttConfig = Field(title="MQTT configuration.")
+    ld: Dict[str, LdConfig] = Field(title="此处用来配置雷达的数据")
+    plc: PlcConfig = Field(title="此处用于配置plc")
+    weights: WeightsConfig = Field(title="此处用于配置各种权重")
     notifications: NotificationConfig = Field(
         default_factory=NotificationConfig, title="Global notification configuration."
     )

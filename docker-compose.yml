@@ -33,6 +33,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ./config:/config
       - ./debug:/media/frigate
+      - /home/shucheng/video:/media/frigate
      # - /dev/bus/usb:/dev/bus/usb # Uncomment for Google Coral USB
   mqtt:
     container_name: mqtt
