@@ -44,6 +44,7 @@ from frigate.embeddings import EmbeddingsContext, manage_embeddings
 from frigate.events.audio import AudioProcessor
 from frigate.events.cleanup import EventCleanup
 from frigate.events.maintainer import EventProcessor
+from frigate.ld_score.LdScoreManages import ld_data_process
 from frigate.models import (
     Event,
     Export,
@@ -420,16 +421,21 @@ class FrigateApp:
         #首先获取摄像头名称列表
         camerasList = [
             name
-            for name in self.config.cameras.values()
+            for name, config in self.config.cameras.items()
         ]
-        #测试plc和weights
-        # print(self.config.plc.name)
-        # print(self.config.weights.camera)
-        # print(self.config.weights.stop)
         #在获取每一个ld的数据
         for name, config in self.config.ld.items():
+            score = 0.00
+            self.ld_score_dist.append({name: score})
             if name in camerasList:
-                pass
+                #在此处给每一个ld开启一个进程用于读取ld数据
+                ld_score_process = mp.Process(
+                target=ld_data_process,  # 处理雷达数据的函数
+                args=(name, config, self.ld_score_dist), # 传入参数
+                daemon=True                   # 随主进程退出
+            )
+                ld_score_process.start()
+                self.log_queue.put(f"雷达 {name} 的数据处理进程已启动")
             else:
                 self.log_queue.put("ld进程启动失败,错误：每个雷达的名称必须有一个对应的摄像头名称")
                 self.stop_event.is_set()
