@@ -106,11 +106,11 @@ class FrigateApp:
         self.config = config
 
         #########################################################################################
-        #在次数初始化雷达所需要的参数
-        #首先需要一个雷达的分数，分数是一个进程间的共享变量
-        #但是其中有很多的雷达，所以需要一个字典，来存储不同雷达的分数
-        # self.ld_score = mp.Value("d", 0.0)
-        self.ld_score_dist: list[dict[str, mp.value]] = []#这个列表用来存储不同的雷达的分数
+        #在此处初始化雷达所需要的参数
+        #在这里进行雷达队列的创建
+        self.red_score_queue: Queue = mp.Queue(maxsize=2)
+        self.ld2410b_score_queue: Queue = mp.Queue(maxsize=2)
+        self.ld6002b_score_queue: Queue = mp.Queue(maxsize=2)
         #########################################################################################
 
 
@@ -425,13 +425,11 @@ class FrigateApp:
         ]
         #在获取每一个ld的数据
         for name, config in self.config.ld.items():
-            score = 0.00
-            self.ld_score_dist.append({name: score})
             if name in camerasList:
                 #在此处给每一个ld开启一个进程用于读取ld数据
                 ld_score_process = mp.Process(
                 target=ld_data_process,  # 处理雷达数据的函数
-                args=(name, config, self.ld_score_dist), # 传入参数
+                args=(name, config, self.red_score_queue, self.ld2410b_score_queue, self.ld6002b_score_queue, self.stop_event), # 传入参数
                 daemon=True                   # 随主进程退出
             )
                 ld_score_process.start()

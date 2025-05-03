@@ -5,15 +5,15 @@ import paho.mqtt.client as mqtt
 
 
 class MQTTSubscriber:
-    def __init__(self, ip, port, username, password, topic, queue, flag_plc): #, red_queue, ld2410b_queue, ld6002b_queue
-        self.client_id = "python_subscriber_1"
+    def __init__(self, ip, port, username, password, topic, queue, client_id, flag_plc): #, red_queue, ld2410b_queue, ld6002b_queue
+        self.client_id = client_id
         self.ip = ip
         self.port = port
         self.username = username
         self.password = password
         self.topic = topic
         self.queue = queue
-        self.flag_plc = flag_plc #bool true时代表控制plc，false时代表页面展示
+        self.flag_plc = flag_plc #bool true时代表控制plc，队列数据简洁，false时代表页面展示，队列数据复杂
         self.keepalive = 60
         self.qos = 1
         self.clean_session = False
@@ -67,12 +67,15 @@ class MQTTSubscriber:
                     "payload": payload,
                     "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
                 }
-                self.queue.put(message_show)
+                if self.queue.full():
+                    self.queue.get_nowait()
+                    self.queue.put_nowait(message_show)
+
+                else:
+                    self.queue.put(message_show)
             else:
                 # 控制plc的消息
-                message_plc = {
-                    "payload": payload,
-                }
+                message_plc = payload
                 self.queue.put(message_plc)
         except UnicodeDecodeError:
             print(f"Received binary message: {msg.payload}")
@@ -108,7 +111,7 @@ class MQTTSubscriber:
 
             # 保持主线程运行
             while True:
-                time.sleep(0.01)
+                time.sleep(0.05)
         except KeyboardInterrupt:
             print("\nDisconnecting gracefully...")
             self.client.loop_stop()
