@@ -51,12 +51,18 @@ class TrackedObjectProcessor(threading.Thread):
         tracked_objects_queue,
         ptz_autotracker_thread,
         stop_event,
+        red_score_dict,
+        ld2410b_score_dict,
+        ld6002b_score_dict
     ):
         super().__init__(name="detected_frames_processor")
         self.config = config
         self.dispatcher = dispatcher
         self.tracked_objects_queue = tracked_objects_queue
         self.stop_event: MpEvent = stop_event
+        self.red_score_dict = red_score_dict
+        self.ld2410b_score_dict = ld2410b_score_dict
+        self.ld6002b_score_dict = ld6002b_score_dict
         self.camera_states: dict[str, CameraState] = {}
         self.frame_manager = SharedMemoryFrameManager()
         self.last_motion_detected: dict[str, float] = {}
@@ -72,7 +78,14 @@ class TrackedObjectProcessor(threading.Thread):
 
         self.camera_activity: dict[str, dict[str, any]] = {}
         self.ongoing_manual_events: dict[str, str] = {}
-
+        #此时需要雷达数据，那么此时先读取权重文件
+        weight_config = self.config.weights
+        self.red_weight = weight_config.red
+        self.ld2410b_weight = weight_config.ld2410b
+        self.ld6002b_weight = weight_config.ld6002b
+        self.camera_weight = weight_config.camera
+        self.slow = weight_config.slow
+        self.stop = weight_config.stop
         # {
         #   'zone_name': {
         #       'person': {
@@ -96,9 +109,73 @@ class TrackedObjectProcessor(threading.Thread):
             )
 
         def update(camera: str, obj: TrackedObject, frame_name: str):
+            after = obj.to_dict()
+            # 判断是否是误报，不是误报就开始处理数据并且开始给plc发送数据
+            """当前帧不是误报"""
+            print(1)
+            print(after["false_positive"])
+            if not after["false_positive"]:
+                #不是误报，开始处理数据
+                camera_config = self.config.cameras[camera]
+                #判读是不是需要结合雷达数据
+                if camera_config.is_ld:
+                    #读取雷达数据
+                    camera_weight = self.camera_weight
+
+                    red_score = self.red_score_dict[camera] * self.red_weight
+                    if red_score == 0.0:
+                        camera_weight = self.red_weight + camera_weight
+
+                    ld2410b_score = self.ld2410b_score_dict[camera] * self.ld2410b_weight
+                    if ld2410b_score == 0.0:
+                        camera_weight = self.ld2410b_weight + camera_weight
+
+                    ld6002b_score = self.ld6002b_score_dict[camera] * self.ld6002b_weight
+                    if ld6002b_score == 0.0:
+                        camera_weight = self.ld6002b_weight + camera_weight
+
+                    #读取摄像头数据
+                    camera_score = after["top_score"] * camera_weight
+                    # 计算总分数
+                    total_score = red_score + ld2410b_score + ld6002b_score + camera_score
+                    print(total_score)
+                    print(after["current_zones"])
+                    #判断是否超过了阈值
+                    if "0-6m" in after["current_zones"] or "0-6m" in after["entered_zones"]:
+                        #有人进入了停车区域，此时判断分数是否超过了阈值，然后给plc发送数据
+                        if total_score >= self.stop:
+                            #判断摄像头属于哪个分组
+                            print("停车")
+                    elif set(after["current_zones"]) == {"6-15m"} or set(after["entered_zones"]) == {"6-15m"}:
+                        if total_score >= self.slow:
+                            #判断摄像头属于哪个分组
+                            print("减速")
+                    else:
+                        pass
+                        #没有人进入停车/减速区域
+                else:
+                    #此处不需要结合雷达数据
+                    #在这里直接使用雷达数据进行判断
+                    #读取摄像头数据
+                    camera_score = after["top_score"]
+                    #判断是否超过了阈值
+                    if "0-6m" in after["current_zones"] or "0-6m" in after["entered_zones"]:
+                        #有人进入了停车区域，此时判断分数是否超过了阈值，然后给plc发送数据
+                        if camera_score >= self.stop:
+                            #判断摄像头属于哪个分组
+                            print("停车")
+                    elif set(after["current_zones"]) == {"6-15m"} or set(after["entered_zones"]) == {"6-15m"}:
+                        if camera_score >= self.slow:
+                            #判断摄像头属于哪个分组
+                            print("减速")
+                    else:
+                        #没有人进入停车/减速区域
+                        pass
+            else:
+                #当前帧是误报，跳过检测
+                pass
             obj.has_snapshot = self.should_save_snapshot(camera, obj)
             obj.has_clip = self.should_retain_recording(camera, obj)
-            after = obj.to_dict()
             message = {
                 "before": obj.previous,
                 "after": after,

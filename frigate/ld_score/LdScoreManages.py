@@ -7,12 +7,12 @@ from frigate.ld_score.mqtt_ld import MQTTSubscriber
 
 
 class LdScoreManages():
-    def __init__(self, name, config, red_score_queue, ld2410b_score_queue, ld6002b_score_queue, stop_event):
+    def __init__(self, name, config, red_score_dict, ld2410b_score_dict, ld6002b_score_dict, stop_event):
         self.name = name
         self.config = config
-        self.red_score = 0.00
-        self.ld2410b_score = 0.00
-        self.ld6002b_score = 0.00
+        self.red_score = 0.0
+        self.ld2410b_score = 0.0
+        self.ld6002b_score = 0.0
         self.red_length = config.topics.red_queue_length
         self.ld2410b_length = config.topics.ld2410b_queue_length
         self.ld6002b_length = config.topics.ld6002b_queue_length
@@ -26,9 +26,9 @@ class LdScoreManages():
         self.lock_red_score = threading.Lock()
         self.lock_2410b_score = threading.Lock()
         self.lock_6002b_score = threading.Lock()
-        self.red_score_queue = red_score_queue
-        self.ld2410b_score_queue = ld2410b_score_queue
-        self.ld6002b_score_queue = ld6002b_score_queue
+        self.red_score_dict = red_score_dict
+        self.ld2410b_score_dict = ld2410b_score_dict
+        self.ld6002b_score_dict = ld6002b_score_dict
         self.stop_event = stop_event
 
     def thread_read_red_data(self, lock):
@@ -103,17 +103,11 @@ class LdScoreManages():
         time.sleep(1)
         while not self.stop_event.is_set():
             with self.lock_red_score:
-                item_red = (self.name, self.red_score)
-                print(item_red)
-                self.red_score_queue.put(item_red)
+                self.red_score_dict[self.name] = self.red_score
             with self.lock_2410b_score:
-                item_2410b = (self.name, self.ld2410b_score)
-                print(item_2410b)
-                self.ld2410b_score_queue.put(item_2410b)
+                self.ld2410b_score_dict[self.name] = self.ld2410b_score
             with self.lock_6002b_score:
-                item_6002b = (self.name, self.ld6002b_score)
-                print(item_6002b)
-                self.ld6002b_score_queue.put(item_6002b)
+                self.ld6002b_score_dict[self.name] = self.ld6002b_score
             time.sleep(0.05)
 
 

@@ -104,13 +104,13 @@ class FrigateApp:
         self.region_grids: dict[str, list[list[dict[str, int]]]] = {}
         self.frame_manager = SharedMemoryFrameManager()
         self.config = config
-
+        self.Manager = mp.Manager()
         #########################################################################################
         #在此处初始化雷达所需要的参数
-        #在这里进行雷达队列的创建
-        self.red_score_queue: Queue = mp.Queue(maxsize=2)
-        self.ld2410b_score_queue: Queue = mp.Queue(maxsize=2)
-        self.ld6002b_score_queue: Queue = mp.Queue(maxsize=2)
+        #在这里进行雷达分数字典的创建
+        self.red_score_dict = self.Manager.dict()
+        self.ld2410b_score_dict = self.Manager.dict()
+        self.ld6002b_score_dict = self.Manager.dict()
         #########################################################################################
 
 
@@ -425,19 +425,21 @@ class FrigateApp:
         ]
         #在获取每一个ld的数据
         for name, config in self.config.ld.items():
+            self.red_score_dict[name] = 0.0
+            self.ld2410b_score_dict[name] = 0.0
+            self.ld6002b_score_dict[name] = 0.0
             if name in camerasList:
                 #在此处给每一个ld开启一个进程用于读取ld数据
                 ld_score_process = mp.Process(
                 target=ld_data_process,  # 处理雷达数据的函数
-                args=(name, config, self.red_score_queue, self.ld2410b_score_queue, self.ld6002b_score_queue, self.stop_event), # 传入参数
+                args=(name, config, self.red_score_dict, self.ld2410b_score_dict, self.ld6002b_score_dict, self.stop_event), # 传入参数
                 daemon=True                   # 随主进程退出
             )
                 ld_score_process.start()
                 self.log_queue.put(f"雷达 {name} 的数据处理进程已启动")
             else:
                 self.log_queue.put("ld进程启动失败,错误：每个雷达的名称必须有一个对应的摄像头名称")
-                self.stop_event.is_set()
-
+                self.stop_event.set()  # 触发停止事件
 
     #在此处开启了一个线程来进行物体的检测结果的发布
     ######################################################################################
@@ -448,6 +450,9 @@ class FrigateApp:
             self.detected_frames_queue,
             self.ptz_autotracker_thread,
             self.stop_event,
+            self.red_score_dict,
+            self.ld2410b_score_dict,
+            self.ld6002b_score_dict
         )
         self.detected_frames_processor.start()
 
