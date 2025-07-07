@@ -76,6 +76,7 @@ class MQTTSubscriber:
             else:
                 # 控制plc的消息
                 message_plc = payload
+                # print(f"Received message for PLC control: {message_plc}")
                 self.queue.put(message_plc)
         except UnicodeDecodeError:
             print(f"Received binary message: {msg.payload}")

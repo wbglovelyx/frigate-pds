@@ -546,7 +546,7 @@ def track_camera(
 
     logger.info(f"{name}: exiting subprocess")
 
-##########################################################
+
 def detect(
     detect_config: DetectConfig,
     object_detector,
@@ -708,26 +708,15 @@ def process_frames(
             continue
 
         # look for motion if enabled
-        # motion_boxes = motion_detector.detect(frame)
-        # motion_boxes = []
-        # print(f"frame_shape: {frame_shape}")
-        '''在此处进行读取图片，左上角为中心点，然后是宽度和高度'''
-        #在此处frame是全帧图像 frame_shape是检测输入帧的大小
-        #frame.shape[0]是高度，frame.shape[1]是宽度
-        regions = [0, 0, frame.shape[1], frame.shape[0]]
+        motion_boxes = motion_detector.detect(frame)
 
-        # print(f"regions: {regions}")
-        # print(regions)
+        regions = []
         consolidated_detections = []
-
 
         # if detection is disabled
         if not detect_config.enabled:
             object_tracker.match_and_update(frame_name, frame_time, [])
         else:
-            '''
-            这个代码的作用是找出静止的物体
-            '''
             # get stationary object ids
             # check every Nth frame for stationary objects
             # disappeared objects are not stationary
@@ -745,23 +734,74 @@ def process_frames(
                     # and it hasn't disappeared
                     and object_tracker.disappeared[obj["id"]] == 0
                     # and it doesn't overlap with any current motion boxes when not calibrating
-                    # and not intersects_any(
-                    #     obj["box"],
-                    #     [] if motion_detector.is_calibrating() else motion_boxes,
-                    # )
+                    and not intersects_any(
+                        obj["box"],
+                        [] if motion_detector.is_calibrating() else motion_boxes,
+                    )
                 ]
-            '''这段代码的作用是获取被跟踪的物体的边界框'''
+
             # get tracked object boxes that aren't stationary
             tracked_object_boxes = [
                 (
                     # use existing object box for stationary objects
-                    obj["estimate"] #'''物体的估计位置'''
+                    obj["estimate"]
                     if obj["motionless_count"] < detect_config.stationary.threshold
-                    else obj["box"]# 物体的边界框，此时达到了静止阈值
+                    else obj["box"]
                 )
                 for obj in object_tracker.tracked_objects.values()
                 if obj["id"] not in stationary_object_ids
             ]
+            object_boxes = tracked_object_boxes + object_tracker.untracked_object_boxes
+
+            # get consolidated regions for tracked objects
+            regions = [
+                get_cluster_region(
+                    frame_shape, region_min_size, candidate, object_boxes
+                )
+                for candidate in get_cluster_candidates(
+                    frame_shape, region_min_size, object_boxes
+                )
+            ]
+            # only add in the motion boxes when not calibrating and a ptz is not moving via autotracking
+            # ptz_moving_at_frame_time() always returns False for non-autotracking cameras
+            if not motion_detector.is_calibrating() and not ptz_moving_at_frame_time(
+                frame_time,
+                ptz_metrics.start_time.value,
+                ptz_metrics.stop_time.value,
+            ):
+                # find motion boxes that are not inside tracked object regions
+                standalone_motion_boxes = [
+                    b for b in motion_boxes if not inside_any(b, regions)
+                ]
+
+                if standalone_motion_boxes:
+                    motion_clusters = get_cluster_candidates(
+                        frame_shape,
+                        region_min_size,
+                        standalone_motion_boxes,
+                    )
+                    motion_regions = [
+                        get_cluster_region_from_grid(
+                            frame_shape,
+                            region_min_size,
+                            candidate,
+                            standalone_motion_boxes,
+                            region_grid,
+                        )
+                        for candidate in motion_clusters
+                    ]
+                    regions += motion_regions
+
+            # if starting up, get the next startup scan region
+            if startup_scan:
+                for region in get_startup_regions(
+                    frame_shape, region_min_size, region_grid
+                ):
+                    regions.append(region)
+                startup_scan = False
+
+            # resize regions and detect
+            # seed with stationary objects
             detections = [
                 (
                     obj["label"],
@@ -774,19 +814,19 @@ def process_frames(
                 for obj in object_tracker.tracked_objects.values()
                 if obj["id"] in stationary_object_ids
             ]
-            # print(frame.shape)
-            # for region in regions:
-            detections.extend(
-                detect(
-                    detect_config,
-                    object_detector,
-                    frame,
-                    model_config,
-                    regions,
-                    objects_to_track,
-                    object_filters,
+
+            for region in regions:
+                detections.extend(
+                    detect(
+                        detect_config,
+                        object_detector,
+                        frame,
+                        model_config,
+                        region,
+                        objects_to_track,
+                        object_filters,
+                    )
                 )
-            )
 
             consolidated_detections = reduce_detections(frame_shape, detections)
 
@@ -849,18 +889,18 @@ def process_frames(
                 cv2.COLOR_YUV2BGR_I420,
             )
 
-            # for m_box in motion_boxes:
-            #     cv2.rectangle(
-            #         bgr_frame,
-            #         (m_box[0], m_box[1]),
-            #         (m_box[2], m_box[3]),
-            #         (0, 0, 255),
-            #         2,
-            #     )
+            for m_box in motion_boxes:
+                cv2.rectangle(
+                    bgr_frame,
+                    (m_box[0], m_box[1]),
+                    (m_box[2], m_box[3]),
+                    (0, 0, 255),
+                    2,
+                )
 
             for b in tracked_object_boxes:
                 cv2.rectangle(
-                    frame,
+                    bgr_frame,
                     (b[0], b[1]),
                     (b[2], b[3]),
                     (255, 0, 0),
@@ -908,7 +948,6 @@ def process_frames(
             frame_manager.close(frame_name)
             continue
         else:
-
             fps_tracker.update()
             camera_metrics.process_fps.value = fps_tracker.eps()
             detected_objects_queue.put(
@@ -917,7 +956,7 @@ def process_frames(
                     frame_name,
                     frame_time,
                     detections,
-                    [0, 0, model_config.height, model_config.width],
+                    motion_boxes,
                     regions,
                 )
             )

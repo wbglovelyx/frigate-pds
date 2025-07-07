@@ -1,93 +1,105 @@
+import time
+from types import SimpleNamespace
+
 import snap7
-from snap7.util import set_bool
+from snap7.util import *
 
 
-class SiemensPLCController:
-    def __init__(self, ip: str, rack: int = 0, slot: int = 1):
-        """
-        初始化 PLC 控制器，连接到西门子 PLC。
-
-        :param ip: PLC 的 IP 地址
-        :param rack: 默认机架号，默认为 0
-        :param slot: 默认插槽号，默认为 1
-        """
-        self.ip = ip
-        self.rack = rack
-        self.slot = slot
+class Snap7Client():
+    def __init__(self, config):
+        self.config = config
         self.client = snap7.client.Client()
-        self.connect_statu = False
-        self.connect_false_message = "连接失败，"
+        self.connected = False
+        print(self.config)
 
     def connect(self):
-        """连接到 PLC"""
         try:
-            self.client.connect(self.ip, self.rack, self.slot)
-            self.connect_statu = True
+            self.client.connect(self.config.ip, self.config.rack, self.config.slot)
+            self.connected = True
+            print(f"✅ Connected to PLC at {self.config.ip}")
         except Exception as e:
-            self.connect_statu = False
-            self.connect_false_message = "连接失败，" + str(e)
+            print(f"❌ Connection failed: {e}")
+            self.connected = False
 
     def disconnect(self):
-        """断开与 PLC 的连接"""
-        self.client.disconnect()
-        self.connect_statu = False
+        if self.connected:
+            self.client.disconnect()
+            self.connected = False
+            print("🔌 Disconnected from PLC")
 
-    def send_signals(self, signals: list[bool]):
-        """
-        发送信号到 PLC，最多同时发送两个信号。
-
-        :param signals: 布尔类型的信号列表，最多包含两个信号
-        """
-        if len(signals) > 2:
-            print("最多只能同时发送两个信号")
-            return
-
-        # 模拟向 PLC 发送信号（写入输出地址）
-        for i, signal in enumerate(signals):
-            # 每个信号写入不同的 DBX 地址，例如 DB1.DBX0.0, DB1.DBX0.1
-            db_address = 1  # 数据块编号
-            byte_offset = 0  # 字节偏移量
-            bit_offset = i  # 设置不同的 bit 偏移量
-
-            # 使用 snap7.util 的 set_bool 函数设置信号
-            self.set_output_signal(db_address, byte_offset, bit_offset, signal)
-
-        print("信号已成功发送。")
-
-    def set_output_signal(self, db_address: int, byte_offset: int, bit_offset: int, value: bool):
-        """
-        向指定的数据块的地址设置一个布尔输出信号。
-
-        :param db_address: 数据块地址
-        :param byte_offset: 字节偏移
-        :param bit_offset: 比特偏移
-        :param value: 布尔值，True 为开，False 为关
-        """
+    def read_bytes(self, area, dbnumber, start, size):
         try:
-            # 获取当前数据块的内容
-            db_data = self.client.read_area(snap7.types.Areas.DB, db_address, byte_offset, 1)
-
-            # 设置特定位置的布尔值
-            set_bool(db_data, 0, bit_offset, value)
-
-            # 写回 PLC
-            self.client.write_area(snap7.types.Areas.DB, db_address, byte_offset, db_data)
-            print(f"成功写入信号到 DB{db_address}.DBX{byte_offset}.{bit_offset}，值: {value}")
+            return self.client.read_area(area, dbnumber, start, size)
         except Exception as e:
-            print(f"写入信号失败: {e}")
+            print(f"❌ Read error: {e}")
+            return None
+
+    def write_bytes(self, area, dbnumber, start, data):
+        try:
+            self.client.write_area(area, dbnumber, start, data)
+            print("✅ Write successful")
+        except Exception as e:
+            print(f"❌ Write error: {e}")
+
+    def read_bit(self, area, dbnumber, byte, bit):
+        data = self.read_bytes(area, dbnumber, byte, 1)
+        return get_bool(data, 0, bit)
+
+    def write_bit(self, area, dbnumber, byte, bit, value):
+        data = self.read_bytes(area, dbnumber, byte, 1)
+        set_bool(data, 0, bit, value)
+        self.write_bytes(area, dbnumber, byte, data)
+
+    def read_int(self, area, dbnumber, byte):
+        data = self.read_bytes(area, dbnumber, byte, 2)
+        return get_int(data, 0)
+
+    def write_int(self, area, dbnumber, byte, value):
+        data = bytearray(2)
+        set_int(data, 0, value)
+        self.write_bytes(area, dbnumber, byte, data)
 
 
-
-
-
-
-# 示例：使用该类连接 PLC 并发送信号
 if __name__ == "__main__":
-    plc = SiemensPLCController(ip="192.168.0.1")
+    config = SimpleNamespace(ip="192.168.1.2", rack=0, slot=1)
+    plc = Snap7Client(config)
+
     plc.connect()
 
-    # 发送两个信号
-    plc.send_signals([True, False])  # 例如：设置 DB1.DBX0.0 为 True，DB1.DBX0.1 为 False
+    if plc.connected:
+        try:
 
-    # 断开连接
+            plc.write_int(snap7.type.Area.MK, 0, 16, 1)
+            value = plc.read_int(snap7.type.Area.MK, 0, 16)
+            print(f"📖 Read from byte {16}: {value}")
+
+            plc.write_int(snap7.type.Area.MK, 0, 17, 1)
+            value = plc.read_int(snap7.type.Area.MK, 0, 17)
+            print(f"📖 Read from byte {17}: {value}")
+
+            plc.write_int(snap7.type.Area.MK, 0, 18, 1)
+            value = plc.read_int(snap7.type.Area.MK, 0, 18)
+            print(f"📖 Read from byte {18}: {value}")
+
+            #测试灯亮2s
+            plc.write_int(snap7.type.Area.MK, 0, 20, 1)
+            value = plc.read_int(snap7.type.Area.MK, 0, 20)
+            print(f"📖 Read from byte {20}: {value}")
+            time.sleep(2)
+            plc.write_int(snap7.type.Area.MK, 0, 20, 0)
+            value = plc.read_int(snap7.type.Area.MK, 0, 20)
+            print(f"📖 Read from byte {20}: {value}")
+
+            #测试烽鸣器响1s
+            plc.write_int(snap7.type.Area.MK, 0, 21, 1)
+            value = plc.read_int(snap7.type.Area.MK, 0, 21)
+            print(f"📖 Read from byte {21}: {value}")
+            time.sleep(0.5)
+            plc.write_int(snap7.type.Area.MK, 0, 21, 0)
+            value = plc.read_int(snap7.type.Area.MK, 0, 21)
+            print(f"📖 Read from byte {21}: {value}")
+
+        except Exception as e:
+            print(f"❌ Error during PLC operations: {e}")
+
     plc.disconnect()

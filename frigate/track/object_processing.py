@@ -53,7 +53,8 @@ class TrackedObjectProcessor(threading.Thread):
         stop_event,
         red_score_dict,
         ld2410b_score_dict,
-        ld6002b_score_dict
+        ld6002b_score_dict,
+        camera_plc_queue
     ):
         super().__init__(name="detected_frames_processor")
         self.config = config
@@ -96,7 +97,18 @@ class TrackedObjectProcessor(threading.Thread):
         # }
         self.zone_data = defaultdict(lambda: defaultdict(dict))
         self.active_zone_data = defaultdict(lambda: defaultdict(dict))
+        self.camera_plc_queue = camera_plc_queue
+        self.single_plc = 0
+        self.last_single_plc = 0
+        camera_group_dict = {}
 
+        for name, group in self.config.camera_groups.items():
+            camera_group_dict[name] = group.cameras  # 如果是 Pydantic 对象
+    # camera_group_dict[name] = group["cameras"]  # 如果是 dict
+        # print(camera_group_dict)
+        front_cameras = camera_group_dict.get("front", [])
+        back_cameras = camera_group_dict.get("back", [])
+        inside_cameras = camera_group_dict.get("inside", [])
         def start(camera: str, obj: TrackedObject, frame_name: str):
             self.event_sender.publish(
                 (
@@ -112,8 +124,6 @@ class TrackedObjectProcessor(threading.Thread):
             after = obj.to_dict()
             # 判断是否是误报，不是误报就开始处理数据并且开始给plc发送数据
             """当前帧不是误报"""
-            print(1)
-            print(after["false_positive"])
             if not after["false_positive"]:
                 #不是误报，开始处理数据
                 camera_config = self.config.cameras[camera]
@@ -138,18 +148,28 @@ class TrackedObjectProcessor(threading.Thread):
                     camera_score = after["top_score"] * camera_weight
                     # 计算总分数
                     total_score = red_score + ld2410b_score + ld6002b_score + camera_score
-                    print(total_score)
-                    print(after["current_zones"])
                     #判断是否超过了阈值
                     if "0-6m" in after["current_zones"] or "0-6m" in after["entered_zones"]:
                         #有人进入了停车区域，此时判断分数是否超过了阈值，然后给plc发送数据
                         if total_score >= self.stop:
                             #判断摄像头属于哪个分组
-                            print("停车")
+                            if camera in front_cameras:
+                                self.single_plc = 1
+                            elif camera in back_cameras:
+                                self.single_plc = 3
+                            elif camera in inside_cameras:
+                                self.single_plc = 5
+                            else:
+                                self.single_plc = 0
                     elif set(after["current_zones"]) == {"6-15m"} or set(after["entered_zones"]) == {"6-15m"}:
                         if total_score >= self.slow:
                             #判断摄像头属于哪个分组
-                            print("减速")
+                            if camera in front_cameras:
+                                self.single_plc = 2
+                            elif camera in back_cameras:
+                                self.single_plc = 4
+                            else:
+                                self.single_plc = 0
                     else:
                         pass
                         #没有人进入停车/减速区域
@@ -163,14 +183,38 @@ class TrackedObjectProcessor(threading.Thread):
                         #有人进入了停车区域，此时判断分数是否超过了阈值，然后给plc发送数据
                         if camera_score >= self.stop:
                             #判断摄像头属于哪个分组
-                            print("停车")
+                            if camera in front_cameras:
+                                self.single_plc = 1
+                            elif camera in back_cameras:
+                                self.single_plc = 3
+                            elif camera in inside_cameras:
+                                self.single_plc = 5
+                            else:
+                                self.single_plc = 0
                     elif set(after["current_zones"]) == {"6-15m"} or set(after["entered_zones"]) == {"6-15m"}:
                         if camera_score >= self.slow:
                             #判断摄像头属于哪个分组
-                            print("减速")
+                            if camera in front_cameras:
+                                self.single_plc = 2
+                            elif camera in back_cameras:
+                                self.single_plc = 4
+                            else:
+                                self.single_plc = 0
                     else:
                         #没有人进入停车/减速区域
                         pass
+                # 如果信号不相同，那么就需要写入信号的值，判断队列是否满，如果满了那么先取在放
+                if self.last_single_plc != self.single_plc:
+                    try:
+                        self.camera_plc_queue.put_nowait(self.single_plc)
+                    except queue.Full:
+                        # 移除最老的一个值，重新放入
+                        try:
+                            _ = self.camera_plc_queue.get_nowait()
+                            self.camera_plc_queue.put_nowait(self.single_plc)
+                        except Exception as e:
+                            print(f"⚠️ 队列处理异常: {e}")
+                    self.last_single_plc = self.single_plc
             else:
                 #当前帧是误报，跳过检测
                 pass

@@ -9,6 +9,7 @@ import { LuConstruction } from "react-icons/lu";
 import { MdVideoLibrary } from "react-icons/md";
 import { TbFaceId } from "react-icons/tb";
 import useSWR from "swr";
+import { AiOutlineCluster } from "react-icons/ai";
 
 export const ID_LIVE = 1;
 export const ID_REVIEW = 2;
@@ -16,7 +17,7 @@ export const ID_EXPLORE = 3;
 export const ID_EXPORT = 4;
 export const ID_PLAYGROUND = 5;
 export const ID_FACE_LIBRARY = 6;
-
+export const ID_device = 7;
 export default function useNavigation(
   variant: "primary" | "secondary" = "primary",
 ) {
@@ -70,6 +71,13 @@ export default function useNavigation(
           title: "menu.faceLibrary",
           url: "/faces",
           enabled: isDesktop && config?.face_recognition.enabled,
+        },
+        {
+          id: ID_device,
+          variant,
+          icon: AiOutlineCluster,
+          title: "menu.device",
+          url: "/device",
         },
       ] as NavData[],
     [config?.face_recognition?.enabled, variant],

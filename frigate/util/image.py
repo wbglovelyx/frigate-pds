@@ -409,12 +409,12 @@ def get_yuv_crop(frame_shape, crop):
 
 
 def yuv_crop_and_resize(frame, region, height=None):
-    # Crops and resizes a YUV frame while maintaining aspect ratio
-    # https://stackoverflow.com/a/57022634
     height = frame.shape[0] // 3 * 2
     width = frame.shape[1]
 
-    # get the crop box if the region extends beyond the frame
+    # ✅ 修复 region：必须拷贝为 list，才能被修改
+    # region[3] = min(region[3], height)
+    # print(f"region: {region}")
     crop_x1 = max(0, region[0])
     crop_y1 = max(0, region[1])
     # ensure these are a multiple of 4
@@ -434,7 +434,10 @@ def yuv_crop_and_resize(frame, region, height=None):
     # create the yuv region frame
     # make sure the size is a multiple of 4
     # TODO: this should be based on the size after resize now
-    size = (region[3] - region[1]) // 4 * 4
+    '''非常爽，我曹，解决bug好爽，我感觉我又可以了哈哈哈哈哈哈哈哈哈哈哈'''
+    size1 = (region[3] - region[1]) // 4 * 4
+    size2 = (region[2] - region[0]) // 4 * 4
+    size = max(size1, size2)
     yuv_cropped_frame = np.zeros((size + size // 2, size), np.uint8)
     # fill in black
     yuv_cropped_frame[:] = 128

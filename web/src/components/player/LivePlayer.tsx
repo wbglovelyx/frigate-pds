@@ -221,7 +221,18 @@ export default function LivePlayer({
     }
     prevCameraEnabledRef.current = cameraEnabled;
   }, [cameraEnabled]);
-
+  const [isAlertOpen, setIsAlertOpen] = useState(true); // 警示是否显示（手动关闭后需保持）
+  const [wasManuallyClosed, setWasManuallyClosed] = useState(false); // 标记是否手动关闭过警示
+  useEffect(() => {
+    if (activeTracking) {
+      if (!wasManuallyClosed) {
+        setIsAlertOpen(true);
+      }
+    } else {
+      setIsAlertOpen(false);
+      setWasManuallyClosed(false);
+    }
+  }, [activeTracking, wasManuallyClosed]);
   useEffect(() => {
     if (liveReady && isReEnabling) {
       setIsReEnabling(false);
@@ -305,104 +316,136 @@ export default function LivePlayer({
   }
 
   return (
-    <div
-      ref={cameraRef ?? internalContainerRef}
-      data-camera={cameraConfig.name}
-      className={cn(
-        "relative flex w-full cursor-pointer justify-center outline",
-        activeTracking &&
-          ((showStillWithoutActivity && !liveReady) || liveReady)
-          ? "outline-3 rounded-lg shadow-severity_alert outline-severity_alert md:rounded-2xl"
-          : "outline-0 outline-background",
-        "transition-all duration-500",
-        className,
-      )}
-      onClick={onClick}
-      onAuxClick={(e) => {
-        if (e.button === 1) {
-          window.open(`${baseUrl}#${cameraConfig.name}`, "_blank")?.focus();
-        }
-      }}
-    >
-      {cameraEnabled &&
-        ((showStillWithoutActivity && !liveReady) || liveReady) && (
-          <>
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[30%] w-full rounded-lg bg-gradient-to-b from-black/20 to-transparent md:rounded-2xl"></div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[10%] w-full rounded-lg bg-gradient-to-t from-black/20 to-transparent md:rounded-2xl"></div>
-          </>
+    <div className="relative h-auto w-full">
+      <div
+        ref={cameraRef ?? internalContainerRef}
+        data-camera={cameraConfig.name}
+        className={cn(
+          "relative flex w-full cursor-pointer justify-center outline",
+          activeTracking &&
+            ((showStillWithoutActivity && !liveReady) || liveReady)
+            ? "outline-3 rounded-lg shadow-severity_alert outline-severity_alert md:rounded-2xl"
+            : "outline-0 outline-background",
+          "transition-all duration-500",
+          className,
         )}
-      {player}
-      {cameraEnabled &&
-        !offline &&
-        (!showStillWithoutActivity || isReEnabling) &&
-        !liveReady && <ActivityIndicator />}
+        onClick={onClick}
+        onAuxClick={(e) => {
+          if (e.button === 1) {
+            window.open(`${baseUrl}#${cameraConfig.name}`, "_blank")?.focus();
+          }
+        }}
+      >
+        {cameraEnabled &&
+          ((showStillWithoutActivity && !liveReady) || liveReady) && (
+            <>
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[30%] w-full rounded-lg bg-gradient-to-b from-black/20 to-transparent md:rounded-2xl"></div>
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[10%] w-full rounded-lg bg-gradient-to-t from-black/20 to-transparent md:rounded-2xl"></div>
+            </>
+          )}
+        {player}
+        {cameraEnabled &&
+          !offline &&
+          (!showStillWithoutActivity || isReEnabling) &&
+          !liveReady && <ActivityIndicator />}
+        {((showStillWithoutActivity && !liveReady) || liveReady) &&
+          objects.length > 0 && (
+            <div className="absolute left-0 top-2 z-40">
+              <Tooltip>
+                <div className="flex">
+                  <TooltipTrigger asChild>
+                    <div className="mx-3 pb-1 text-sm text-white">
+                      <Chip
+                        className={`z-0 flex items-start justify-between space-x-1 bg-gray-500 bg-gradient-to-br from-gray-400 to-gray-500`}
+                      >
+                        {[
+                          ...new Set([
+                            ...(objects || []).map(({ label }) => label),
+                          ]),
+                        ]
+                          .map((label) => {
+                            return getIconForLabel(label, "size-3 text-white");
+                          })
+                          .sort()}
+                      </Chip>
+                    </div>
+                  </TooltipTrigger>
+                </div>
+                <TooltipPortal>
+                  <TooltipContent className="smart-capitalize">
+                    {[
+                      ...new Set([
+                        ...(objects || []).map(({ label, sub_label }) =>
+                          label.endsWith("verified")
+                            ? sub_label
+                            : label.replaceAll("_", " "),
+                        ),
+                      ]),
+                    ]
+                      .filter((label) => label?.includes("-verified") == false)
+                      .map((label) => capitalizeFirstLetter(label))
+                      .sort()
+                      .join(", ")
+                      .replaceAll("-verified", "")}
+                  </TooltipContent>
+                </TooltipPortal>
+              </Tooltip>
+            </div>
+          )}
+        <div
+          className={cn(
+            "absolute inset-0 w-full",
+            showStillWithoutActivity &&
+              !liveReady &&
+              !isReEnabling &&
+              cameraEnabled
+              ? "visible"
+              : "invisible",
+          )}
+        >
+          <AutoUpdatingCameraImage
+            className="pointer-events-none size-full"
+            cameraClasses="relative size-full flex justify-center"
+            camera={cameraConfig.name}
+            showFps={false}
+            reloadInterval={stillReloadInterval}
+            periodicCache
+          />
+        </div>
+      </div>
+      {/* ---------- 中央警示元素（三角+文字+关闭按钮） ---------- */}
+      <div>
+        {isAlertOpen && (
+          <div className="z-60 absolute inset-0 flex flex-col items-center justify-center">
+            {/* 深红色三角警示符（SVG自定义） */}
+            <svg
+              className="h-24 w-24 animate-pulse text-red-800 drop-shadow-2xl"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M12 2L2 20h20L12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"
+                fill="currentColor"
+              />
+            </svg>
 
-      {((showStillWithoutActivity && !liveReady) || liveReady) &&
-        objects.length > 0 && (
-          <div className="absolute left-0 top-2 z-40">
-            <Tooltip>
-              <div className="flex">
-                <TooltipTrigger asChild>
-                  <div className="mx-3 pb-1 text-sm text-white">
-                    <Chip
-                      className={`z-0 flex items-start justify-between space-x-1 bg-gray-500 bg-gradient-to-br from-gray-400 to-gray-500`}
-                    >
-                      {[
-                        ...new Set([
-                          ...(objects || []).map(({ label }) => label),
-                        ]),
-                      ]
-                        .map((label) => {
-                          return getIconForLabel(label, "size-3 text-white");
-                        })
-                        .sort()}
-                    </Chip>
-                  </div>
-                </TooltipTrigger>
-              </div>
-              <TooltipPortal>
-                <TooltipContent className="smart-capitalize">
-                  {[
-                    ...new Set([
-                      ...(objects || []).map(({ label, sub_label }) =>
-                        label.endsWith("verified")
-                          ? sub_label
-                          : label.replaceAll("_", " "),
-                      ),
-                    ]),
-                  ]
-                    .filter((label) => label?.includes("-verified") == false)
-                    .map((label) => capitalizeFirstLetter(label))
-                    .sort()
-                    .join(", ")
-                    .replaceAll("-verified", "")}
-                </TooltipContent>
-              </TooltipPortal>
-            </Tooltip>
+            {/* 警示文本 */}
+            <p className="mt-4 text-3xl font-extrabold text-red-600">
+              存在行人，请注意驾驶
+            </p>
+
+            {/* 手动关闭按钮 */}
+            <button
+              className="mt-8 rounded-lg bg-red-700 px-6 py-2 text-white shadow hover:bg-red-800"
+              onClick={() => {
+                setIsAlertOpen(false);
+                setWasManuallyClosed(true); // 标记为手动关闭
+              }}
+            >
+              暂时关闭警示
+            </button>
           </div>
         )}
-
-      <div
-        className={cn(
-          "absolute inset-0 w-full",
-          showStillWithoutActivity &&
-            !liveReady &&
-            !isReEnabling &&
-            cameraEnabled
-            ? "visible"
-            : "invisible",
-        )}
-      >
-        <AutoUpdatingCameraImage
-          className="pointer-events-none size-full"
-          cameraClasses="relative size-full flex justify-center"
-          camera={cameraConfig.name}
-          showFps={false}
-          reloadInterval={stillReloadInterval}
-          periodicCache
-        />
       </div>
-
       {offline && !showStillWithoutActivity && cameraEnabled && (
         <div className="absolute inset-0 left-1/2 top-1/2 flex h-96 w-96 -translate-x-1/2 -translate-y-1/2">
           <div className="flex flex-col items-center justify-center rounded-lg bg-background/50 p-5">
@@ -421,7 +464,6 @@ export default function LivePlayer({
           </div>
         </div>
       )}
-
       {!cameraEnabled && (
         <div className="relative flex h-full w-full items-center justify-center rounded-2xl border border-secondary-foreground bg-background_alt">
           <div className="flex h-32 flex-col items-center justify-center rounded-lg p-4 md:h-48 md:w-48">
@@ -432,7 +474,6 @@ export default function LivePlayer({
           </div>
         </div>
       )}
-
       <div className="absolute right-2 top-2">
         {autoLive &&
           !offline &&

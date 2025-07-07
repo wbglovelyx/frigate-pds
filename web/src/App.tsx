@@ -24,6 +24,7 @@ const UIPlayground = lazy(() => import("@/pages/UIPlayground"));
 const FaceLibrary = lazy(() => import("@/pages/FaceLibrary"));
 const Logs = lazy(() => import("@/pages/Logs"));
 const AccessDenied = lazy(() => import("@/pages/AccessDenied"));
+const Device = lazy(() => import("@/pages/Device"));
 
 function App() {
   return (
@@ -65,6 +66,7 @@ function App() {
                       <Route path="/logs" element={<Logs />} />
                       <Route path="/faces" element={<FaceLibrary />} />
                       <Route path="/playground" element={<UIPlayground />} />
+                      <Route path="/device" element={<Device />} />
                     </Route>
                     <Route path="/unauthorized" element={<AccessDenied />} />
                     <Route path="*" element={<Redirect to="/" />} />

@@ -63,9 +63,11 @@ from .classification import (
 from .database import DatabaseConfig
 from .env import EnvVars
 from .logger import LoggerConfig
+from .motionDetectionConfig import motionDetectionConfig
 from .mqtt import MqttConfig
 from .plc import PlcConfig
 from .proxy import ProxyConfig
+from .singleLdConfig import singleLdConfig
 from .telemetry import TelemetryConfig
 from .tls import TlsConfig
 from .ui import UIConfig
@@ -344,6 +346,8 @@ class FrigateConfig(FrigateBaseModel):
     ld: Dict[str, LdConfig] = Field(title="此处用来配置雷达的数据")
     plc: PlcConfig = Field(title="此处用于配置plc")
     weights: WeightsConfig = Field(title="此处用于配置各种权重")
+    singleLd: singleLdConfig = Field(title="此处用于配置单雷达权重")
+    singleMotion: motionDetectionConfig = Field(title="此处用于配置整体运动检测是否开启")
     notifications: NotificationConfig = Field(
         default_factory=NotificationConfig, title="Global notification configuration."
     )

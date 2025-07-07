@@ -58,6 +58,7 @@ from frigate.models import (
 )
 from frigate.object_detection.base import ObjectDetectProcess
 from frigate.output.output import output_frames
+from frigate.plc.controller import PlcController
 from frigate.ptz.autotrack import PtzAutoTrackerThread
 from frigate.ptz.onvif import OnvifController
 from frigate.record.cleanup import RecordingCleanup
@@ -111,8 +112,18 @@ class FrigateApp:
         self.red_score_dict = self.Manager.dict()
         self.ld2410b_score_dict = self.Manager.dict()
         self.ld6002b_score_dict = self.Manager.dict()
-        #########################################################################################
-
+        self.ld_single_config = self.config.singleLd
+        '''在次处开始编写plc信号的代码'''
+        # 共享队列1：用于共享摄像头发送的plc信号的队列
+        self.camera_plc_queue = self.Manager.Queue(maxsize=5)
+        # # 共享队列2：用于共享雷达发送的plc信号的队列
+        # self.ld_plc_queue = self.Manager.Queue(maxsize=10)
+        # 由于两个雷达控制的停车信号是不相同的，所以无法使用一个简单的队列来控制，所以我们才用字典加队列的形式来控制
+        # 对于名字的话，我们从配置文件中进行读取，在此处我们需要开始传建一个包含队列的字典
+        self.ld_plc_dict = self.Manager.dict() #后续在补充完整定义，这就造成了，必须先初始化雷达进程，才能去初始化plc进程，所以查看执行逻辑
+        '''在此处结束编写plc信号的代码
+           在下方需要开启一个进程来创建plc对象并且处理数据
+        '''
 
     def ensure_dirs(self) -> None:
         dirs = [
@@ -412,6 +423,7 @@ class FrigateApp:
         self.ptz_autotracker_thread.start()
     ######################################################################################
     #在此处开启一个进程使用3个线程来处理3个不同的雷达数据的处理，只需要一个共享变量score就可以
+    ######################################################################################
     def start_ld_score_processor(self) -> None:
         '''
         首先通过配置文件来获取雷达的名称和雷达的ip和雷达的端口号，雷达的数据是通过mqtt来发送的，并且
@@ -428,11 +440,20 @@ class FrigateApp:
             self.red_score_dict[name] = 0.0
             self.ld2410b_score_dict[name] = 0.0
             self.ld6002b_score_dict[name] = 0.0
+            # 创建一个包含每个雷达名称对应队列的字典
+            self.ld_plc_dict[name] = self.Manager.Queue(maxsize=5)
+
             if name in camerasList:
                 #在此处给每一个ld开启一个进程用于读取ld数据
                 ld_score_process = mp.Process(
                 target=ld_data_process,  # 处理雷达数据的函数
-                args=(name, config, self.red_score_dict, self.ld2410b_score_dict, self.ld6002b_score_dict, self.stop_event), # 传入参数
+                args=(name, config,
+                      self.red_score_dict,
+                      self.ld2410b_score_dict,
+                      self.ld6002b_score_dict,
+                      self.ld_single_config,
+                      self.ld_plc_dict,
+                      self.stop_event), # 传入参数
                 daemon=True                   # 随主进程退出
             )
                 ld_score_process.start()
@@ -440,6 +461,33 @@ class FrigateApp:
             else:
                 self.log_queue.put("ld进程启动失败,错误：每个雷达的名称必须有一个对应的摄像头名称")
                 self.stop_event.set()  # 触发停止事件
+
+    '''再这里开始控制plc的信息
+       除了要把共享队列传入到plc进程中，同时需要将共享队列传入到camera和ld的控制进程中
+       camera的控制进程为start_detected_frames_processor，ld的控制进程为ld_data_process
+    '''
+    def start_controller_plc(self) -> None:
+        '''
+        在此处开启一个线程来进行plc的控制，主要是读取plc的数据和写入plc的数据
+        '''
+        #首先读取配置文件中的plc的配置信息
+        plc_config = self.config.plc
+        if plc_config.enable:
+            #此时启用了plc
+            plc_controller = PlcController(plc_config, self.ld_single_config)
+            #开启一个进程来进行plc的控制
+            plc_process = util.Process(
+                target=plc_controller.run,
+                name="plc控制进程",
+                args=(self.camera_plc_queue, self.ld_plc_dict, self.stop_event),
+            )
+            plc_process.daemon = True
+            plc_process.start()
+            self.processes["plc_controller"] = plc_process.pid or 0
+            logger.info(f"PLC controller process started: {plc_process.pid}")
+        else:
+            #如果没有启用plc，则不需要开启plc的控制进程
+            logger.info("PLC controller is not enabled, skipping PLC control process.")
 
     #在此处开启了一个线程来进行物体的检测结果的发布
     ######################################################################################
@@ -452,7 +500,8 @@ class FrigateApp:
             self.stop_event,
             self.red_score_dict,
             self.ld2410b_score_dict,
-            self.ld6002b_score_dict
+            self.ld6002b_score_dict,
+            self.camera_plc_queue,
         )
         self.detected_frames_processor.start()
 
@@ -692,7 +741,10 @@ class FrigateApp:
         self.init_embeddings_client()
         self.start_video_output_processor()
         self.start_ptz_autotracker()
-        self.start_ld_score_processor()#  ###########
+        '''先执行雷达进程，在执行plc进程'''
+        self.start_ld_score_processor()
+        self.start_controller_plc()
+        '''注意这个执行顺序'''
         self.init_historical_regions()
         self.start_detected_frames_processor()
         self.start_camera_processors()
