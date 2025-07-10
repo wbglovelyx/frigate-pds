@@ -48,6 +48,12 @@ type ClassificationSettings = {
   bird: {
     enabled?: boolean;
   };
+  plc: {
+    enabled?: boolean;
+  };
+  singleLd: {
+    enabled?: boolean;
+  };
 };
 
 type ClassificationSettingsViewProps = {
@@ -71,6 +77,8 @@ export default function ClassificationSettingsView({
       face: { enabled: undefined, model_size: undefined },
       lpr: { enabled: undefined },
       bird: { enabled: undefined },
+      plc: { enabled: undefined },
+      singleLd: { enabled: undefined },
     });
 
   const [origSearchSettings, setOrigSearchSettings] =
@@ -79,6 +87,8 @@ export default function ClassificationSettingsView({
       face: { enabled: undefined, model_size: undefined },
       lpr: { enabled: undefined },
       bird: { enabled: undefined },
+      plc: { enabled: undefined },
+      singleLd: { enabled: undefined },
     });
 
   useEffect(() => {
@@ -97,6 +107,10 @@ export default function ClassificationSettingsView({
           bird: {
             enabled: config.classification.bird.enabled,
           },
+          plc: { enabled: config.plc.enabled },
+          singleLd: {
+            enabled: config.singleLd.enabled,
+          },
         });
       }
 
@@ -111,6 +125,10 @@ export default function ClassificationSettingsView({
         },
         lpr: { enabled: config.lpr.enabled },
         bird: { enabled: config.classification.bird.enabled },
+        plc: { enabled: config.plc.enabled },
+        singleLd: {
+          enabled: config.singleLd.enabled,
+        },
       });
     }
     // we know that these deps are correct
@@ -125,6 +143,8 @@ export default function ClassificationSettingsView({
       face: { ...prevConfig.face, ...newConfig.face },
       lpr: { ...prevConfig.lpr, ...newConfig.lpr },
       bird: { ...prevConfig.bird, ...newConfig.bird },
+      plc: { ...prevConfig.plc, ...newConfig.plc },
+      singleLd: { ...prevConfig.singleLd, ...newConfig.singleLd },
     }));
     setUnsavedChanges(true);
     setChangedValue(true);
@@ -132,12 +152,42 @@ export default function ClassificationSettingsView({
 
   const saveToConfig = useCallback(async () => {
     setIsLoading(true);
-
+    // 构建 PUT 请求的查询参数
+    const params = new URLSearchParams();
+    params.append(
+      "semantic_search.enabled",
+      classificationSettings.search.enabled ? "True" : "False",
+    );
+    params.append(
+      "semantic_search.model_size",
+      classificationSettings.search.model_size || "",
+    );
+    params.append(
+      "face_recognition.enabled",
+      classificationSettings.face.enabled ? "True" : "False",
+    );
+    params.append(
+      "face_recognition.model_size",
+      classificationSettings.face.model_size || "",
+    );
+    params.append(
+      "lpr.enabled",
+      classificationSettings.lpr.enabled ? "True" : "False",
+    );
+    params.append(
+      "classification.bird.enabled",
+      classificationSettings.bird.enabled ? "True" : "False",
+    );
+    params.append(
+      "plc.enabled",
+      classificationSettings.plc.enabled ? "True" : "False",
+    );
+    params.append(
+      "singleLd.enabled",
+      classificationSettings.singleLd.enabled ? "True" : "False",
+    );
     axios
-      .put(
-        `config/set?semantic_search.enabled=${classificationSettings.search.enabled ? "True" : "False"}&semantic_search.model_size=${classificationSettings.search.model_size}&face_recognition.enabled=${classificationSettings.face.enabled ? "True" : "False"}&face_recognition.model_size=${classificationSettings.face.model_size}&lpr.enabled=${classificationSettings.lpr.enabled ? "True" : "False"}&classification.bird.enabled=${classificationSettings.bird.enabled ? "True" : "False"}`,
-        { requires_restart: 0 },
-      )
+      .put(`config/set?${params.toString()}`, { requires_restart: 0 })
       .then((res) => {
         if (res.status === 200) {
           toast.success(t("classification.toast.success"), {
@@ -247,6 +297,55 @@ export default function ClassificationSettingsView({
           {t("classification.title")}
         </Heading>
         <Separator className="my-2 flex bg-secondary" />
+        {/* 在此处添加两个按钮，控制plc，控制雷达
+          实现思路：
+            1.从后端读取数据并渲染页面
+            2.点击按钮并更改状态变量的值
+            3.将数据发送至后端进行处理
+        */}
+        <Heading as="h4" className="my-2">
+          {"雷达和plc"}
+        </Heading>
+
+        <div className="flex w-full max-w-lg flex-col space-y-6">
+          <div className="flex flex-row items-center">
+            <Switch
+              id="enabled"
+              className="mr-3"
+              disabled={classificationSettings.plc.enabled === undefined}
+              checked={classificationSettings.plc.enabled === true}
+              onCheckedChange={(isChecked) => {
+                handleClassificationConfigChange({
+                  plc: { enabled: isChecked },
+                });
+              }}
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="enabled">{"连锁plc"}</Label>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex w-full max-w-lg flex-col space-y-6">
+          <div className="flex flex-row items-center">
+            <Switch
+              id="enabled"
+              className="mr-3"
+              disabled={classificationSettings.singleLd.enabled === undefined}
+              checked={classificationSettings.singleLd.enabled === true}
+              onCheckedChange={(isChecked) => {
+                handleClassificationConfigChange({
+                  singleLd: { enabled: isChecked },
+                });
+              }}
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="enabled">{"雷达并行"}</Label>
+            </div>
+          </div>
+        </div>
+        <Separator className="my-2 flex bg-secondary" />
+        {/* 此处结束添加按钮 */}
         <Heading as="h4" className="my-2">
           {t("classification.semanticSearch.title")}
         </Heading>

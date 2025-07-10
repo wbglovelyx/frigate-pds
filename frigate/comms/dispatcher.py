@@ -44,7 +44,7 @@ class Dispatcher:
         communicators: list[Communicator],
     ) -> None:
         self.config = config
-        self.config_updater = config_updater
+        self.config_updater = config_updater # 这个是ipc配置文件更新函数
         self.onvif = onvif
         self.ptz_metrics = ptz_metrics
         self.comms = communicators

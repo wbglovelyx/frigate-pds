@@ -430,7 +430,49 @@ export interface FrigateConfig {
     topic_prefix: string;
     user: string | null;
   };
-
+  ld: {
+    head: {
+      ip: string;
+      port: number;
+      username: string;
+      password: string;
+      enable: boolean;
+      topics: {
+        red: string;
+        red_queue_length: number;
+        ld2410b: string;
+        ld2410b_queue_length: number;
+        ld6002b: string;
+        ld6002b_queue_length: number;
+        info_data: string;
+      };
+    };
+  };
+  plc: {
+    name: string;
+    ip: string;
+    rack: number;
+    slot: number;
+    enabled: boolean;
+  };
+  weights: {
+    red: number;
+    ld2410b: number;
+    ld6002b: number;
+    camera: number;
+    slow: number;
+    stop: number;
+  };
+  singleLd: {
+    enabled: boolean;
+    weight_2410b: number;
+    weight_6002b: number;
+    weight_red: number;
+    stop: number;
+  };
+  singleMotion: {
+    enabled: boolean;
+  };
   notifications: {
     enabled: boolean;
     email?: string;

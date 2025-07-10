@@ -25,6 +25,7 @@ type WsState = {
 
 type useValueReturn = [WsState, (update: Update) => void];
 
+// 此函数的执行流程是 通过ws
 function useValue(): useValueReturn {
   const wsUrl = `${baseUrl.replace(/^http/, "ws")}ws`;
 
@@ -32,7 +33,7 @@ function useValue(): useValueReturn {
 
   const [hasCameraState, setHasCameraState] = useState(false);
   const [wsState, setWsState] = useState<WsState>({});
-
+  // 定义了一个副作用函数，仅仅在wsState这个数组发生变化之后才会执行副作用函数
   useEffect(() => {
     if (hasCameraState) {
       return;
@@ -97,7 +98,9 @@ function useValue(): useValueReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsState]);
 
-  // ws handler
+  // 这里准备开始连接ws服务器，sendJsonMessage和readystate是对象结构赋值
+  // sendjsonMessage用于给服务器发送消息，readystate用于判断连接状态
+  // 传入useWebSocket的第二个参数是一个回调函数键值对
   const { sendJsonMessage, readyState } = useWebSocket(wsUrl, {
     onMessage: (event) => {
       const data: Update = JSON.parse(event.data);
@@ -123,6 +126,8 @@ function useValue(): useValueReturn {
     retryOnError: true,
   });
 
+  // 使用useCallback这个回调函数，只有在ws接收到服务器的新数据之后
+  // 才会进行再次调用，即是第二个参数（依赖列表里面的数据发生变化）
   const setState = useCallback(
     (message: Update) => {
       if (readyState === ReadyState.OPEN) {

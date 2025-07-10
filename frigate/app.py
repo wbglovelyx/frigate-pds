@@ -338,6 +338,7 @@ class FrigateApp:
             # Create a client for other processes to use
             self.embeddings = EmbeddingsContext(self.db)
 
+    '''初始化进程同步管理机制'''
     def init_inter_process_communicator(self) -> None:
         self.inter_process_communicator = InterProcessCommunicator()
         self.inter_config_updater = ConfigPublisher()
@@ -347,12 +348,15 @@ class FrigateApp:
     def init_onvif(self) -> None:
         self.onvif_controller = OnvifController(self.config, self.ptz_metrics)
 
+    '''开始学习frigate是如何进行服务端与客户端进行通信的'''
+    # 系统调度器，系统通信
     def init_dispatcher(self) -> None:
         comms: list[Communicator] = []
-
+        # 是否启用了mqtt
         if self.config.mqtt.enabled:
             comms.append(MqttClient(self.config))
-
+        # 查询哪些摄像头启用了通知，如果启用了通知，那么启动webpush
+        # webpush，不需要访问前端，就可接收通知
         notification_cameras = [
             c
             for c in self.config.cameras.values()
@@ -361,10 +365,11 @@ class FrigateApp:
 
         if notification_cameras:
             comms.append(WebPushClient(self.config, self.stop_event))
-
+        # 初始化webscoket,持久连接的全双工协议
         comms.append(WebSocketClient(self.config))
+        # (简称 IPC）是指不同进程之间进行通信的机制
         comms.append(self.inter_process_communicator)
-
+        # 将四个不同的通信器组成一个列表传给Dispatcher
         self.dispatcher = Dispatcher(
             self.config,
             self.inter_config_updater,
@@ -472,7 +477,7 @@ class FrigateApp:
         '''
         #首先读取配置文件中的plc的配置信息
         plc_config = self.config.plc
-        if plc_config.enable:
+        if plc_config.enabled:
             #此时启用了plc
             plc_controller = PlcController(plc_config, self.ld_single_config)
             #开启一个进程来进行plc的控制
